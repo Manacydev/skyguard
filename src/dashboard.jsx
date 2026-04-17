@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 
 // ── Aviation Safety Dataset (Kaggle-inspired mock data) ──────────────────────
-const API_BASE = 'http://localhost:8000';
+const API_BASE = process.env.NODE_ENV === 'production' 
+  ? window.location.origin + '/api'
+  : 'http://localhost:8000';
 
 const SAFETY_DB = {
   airlines: {
