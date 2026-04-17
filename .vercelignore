@@ -1,0 +1,10 @@
+node_modules
+venv
+.git
+.gitignore
+README.md
+skyguard_pipeline.ipynb
+__pycache__
+*.pyc
+.pytest_cache
+backend/
