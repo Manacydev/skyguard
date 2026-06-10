@@ -1,84 +1,76 @@
+import csv
 import json
-import pandas as pd
-import joblib
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
-# Load data and model
 ROOT = Path(__file__).resolve().parent.parent
-MODEL_DIR = ROOT / "model"
-DATA_DIR = ROOT / "data" / "processed"
+SCORES_PATH = ROOT / "data" / "processed" / "airline_safety_scores.csv"
 
-try:
-    model = joblib.load(MODEL_DIR / "safety_model.pkl")
-    features = joblib.load(MODEL_DIR / "feature_names.pkl")
-    scores = pd.read_csv(DATA_DIR / "airline_safety_scores.csv")
-except Exception as e:
-    model = None
-    features = None
-    scores = None
-    load_error = str(e)
 
-def handler(request):
-    # Handle both method access styles
-    method = getattr(request, 'method', request.get('method', 'POST'))
-    body = getattr(request, 'body', request.get('body', ''))
-    
-    if isinstance(body, bytes):
-        body = body.decode('utf-8')
-    
-    if method != 'POST':
-        return {
-            "statusCode": 405,
-            "body": json.dumps({"error": "Method not allowed"})
-        }
+def load_scores():
+    with SCORES_PATH.open(newline="", encoding="utf-8") as csv_file:
+        return list(csv.DictReader(csv_file))
 
-    try:
-        if not model or not features or not scores:
-            return {
-                "statusCode": 503,
-                "body": json.dumps({"error": "Model not loaded"})
-            }
-        
-        data = json.loads(body) if isinstance(body, str) else body
-        airline = data.get('airline', '').strip()
-        flight_number = data.get('flight_number', '')
 
-        if not airline:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Airline is required"})
-            }
+def find_airline(rows, query):
+    query = query.lower()
+    for row in rows:
+        if query in row["airline"].lower():
+            return row
+    return None
 
-        row = scores[scores["airline"].str.lower().str.contains(
-            airline.lower(), na=False)]
-        if row.empty:
-            return {
-                "statusCode": 404,
-                "body": json.dumps({"error": "Airline not found"})
-            }
 
-        row = row.iloc[0]
-        X = pd.DataFrame([row[features].fillna(0)])
-        risk = model.predict(X)[0]
-        proba = model.predict_proba(X)[0].tolist()
+def confidence_from_score(score, risk_label):
+    if risk_label == "Safe":
+        safe = min(0.95, 0.55 + max(score - 7.0, 0) / 6)
+        return {"Safe": safe, "Moderate Risk": 1 - safe, "High Risk": 0.0}
+    if risk_label == "Moderate Risk":
+        return {"Safe": 0.2, "Moderate Risk": 0.65, "High Risk": 0.15}
+    high = min(0.9, 0.55 + max(7.0 - score, 0) / 6)
+    return {"Safe": 0.05, "Moderate Risk": 1 - high - 0.05, "High Risk": high}
 
-        response = {
-            "airline": row["airline"],
-            "flight": flight_number,
-            "safety_score": round(float(row["safety_score"]), 2),
-            "risk_label": risk,
-            "incidents": int(row["total_incidents"]),
-            "fatalities": int(row["total_fatalities"]),
-            "confidence": dict(zip(model.classes_, proba)),
-        }
 
-        return {
-            "statusCode": 200,
-            "body": json.dumps(response)
-        }
+class handler(BaseHTTPRequestHandler):
+    def _send_json(self, status_code, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
-    except Exception as e:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
-        }
+    def do_POST(self):
+        try:
+            body_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(body_length).decode("utf-8") if body_length else "{}"
+            data = json.loads(body)
+            airline = data.get("airline", "").strip()
+            flight_number = data.get("flight_number", "")
+
+            if not airline:
+                self._send_json(400, {"error": "Airline is required"})
+                return
+
+            row = find_airline(load_scores(), airline)
+            if row is None:
+                self._send_json(404, {"error": "Airline not found"})
+                return
+
+            score = round(float(row["safety_score"]), 2)
+            risk_label = row["risk_label"]
+            self._send_json(200, {
+                "airline": row["airline"],
+                "flight": flight_number,
+                "safety_score": score,
+                "risk_label": risk_label,
+                "incidents": int(float(row["total_incidents"])),
+                "fatalities": int(float(row["total_fatalities"])),
+                "confidence": confidence_from_score(score, risk_label),
+            })
+        except json.JSONDecodeError:
+            self._send_json(400, {"error": "Invalid JSON body"})
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+
+    def do_GET(self):
+        self._send_json(405, {"error": "Method not allowed"})

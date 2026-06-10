@@ -1,44 +1,41 @@
+import csv
 import json
-import pandas as pd
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
-# Load data
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data" / "processed"
+SCORES_PATH = ROOT / "data" / "processed" / "airline_safety_scores.csv"
 
-try:
-    scores = pd.read_csv(DATA_DIR / "airline_safety_scores.csv")
-except Exception as e:
-    scores = None
-    load_error = str(e)
 
-def handler(request):
-    # Handle both method access styles
-    method = getattr(request, 'method', request.get('method', 'GET'))
-    
-    if method != 'GET':
-        return {
-            "statusCode": 405,
-            "body": json.dumps({"error": "Method not allowed"})
-        }
-
-    try:
-        if not scores:
-            return {
-                "statusCode": 503,
-                "body": json.dumps({"error": "Data not loaded"})
+def load_airlines():
+    with SCORES_PATH.open(newline="", encoding="utf-8") as csv_file:
+        reader = csv.DictReader(csv_file)
+        return [
+            {
+                "airline": row["airline"],
+                "safety_score": float(row["safety_score"]),
+                "risk_label": row["risk_label"],
+                "total_incidents": int(float(row["total_incidents"])),
+                "total_fatalities": int(float(row["total_fatalities"])),
             }
-        
-        response = scores[["airline","safety_score","risk_label",
-                           "total_incidents","total_fatalities"]].to_dict(orient="records")
+            for row in reader
+        ]
 
-        return {
-            "statusCode": 200,
-            "body": json.dumps(response)
-        }
 
-    except Exception as e:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": str(e)})
-        }
+class handler(BaseHTTPRequestHandler):
+    def _send_json(self, status_code, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        try:
+            self._send_json(200, load_airlines())
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+
+    def do_POST(self):
+        self._send_json(405, {"error": "Method not allowed"})
