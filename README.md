@@ -11,6 +11,17 @@ Aviation Safety Intelligence Platform — ML-powered risk assessment for airline
 💡 **Safer Alternatives** — Get recommendations for safer flights on similar routes  
 🎨 **Dark UI Dashboard** — Modern, responsive Tailwind CSS interface with live data viz  
 
+## Screenshots
+
+### Home Page
+![Home Page](dashboard.png.png)
+
+### Flight Safety Check Calculator
+![Flight Safety Check Calculator](safety.png.png)
+
+### Find Flights
+![Find Flights](flight.png.png)
+
 ## Tech Stack
 
 ### Frontend
