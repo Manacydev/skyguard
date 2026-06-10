@@ -28,7 +28,7 @@ Aviation Safety Intelligence Platform — ML-powered risk assessment for airline
 ### Data & ML
 - **Python ML Pipeline** — Feature engineering, model training
 - **Joblib** — Model persistence
-- **CSV Datasets** — Aviation safety records, airline incidents
+- **CSV Datasets** — Aviation safety records, airline incidents, 3 major daatsets used
 
 ## Prerequisites
 
@@ -220,13 +220,7 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 4. Push to branch: `git push origin feature/your-feature`
 5. Open a Pull Request
 
-## License
 
-MIT License — See LICENSE file for details
-
-## Contact
-
-For questions or issues, open a GitHub issue or contact the development team.
 
 ---
 
